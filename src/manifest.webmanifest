@@ -1,0 +1,45 @@
+{
+  "name": "MarkItDown Web",
+  "short_name": "MarkItDown",
+  "description": "Convert documents (PDF, DOCX, PPTX, XLSX, HTML, CSV, …) to Markdown entirely in your browser. Works offline.",
+  "id": "/markitdown/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#12161f",
+  "theme_color": "#1a2332",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "icons/icon-64.png",  "sizes": "64x64",   "type": "image/png" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "application/pdf": [".pdf"],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+        "application/vnd.ms-excel": [".xls"],
+        "application/vnd.ms-outlook": [".msg"],
+        "application/epub+zip": [".epub"],
+        "application/zip": [".zip"],
+        "application/json": [".json"],
+        "application/xml": [".xml", ".rss", ".atom"],
+        "text/html": [".html", ".htm"],
+        "text/csv": [".csv", ".tsv"],
+        "text/markdown": [".md", ".markdown"],
+        "text/plain": [".txt", ".text", ".log", ".rst", ".ini", ".toml", ".yaml", ".yml", ".py", ".js", ".ts", ".rs", ".go", ".java", ".c", ".cpp", ".h", ".sh"],
+        "application/x-ipynb+json": [".ipynb"]
+      },
+      "launch_type": "single-client"
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  }
+}

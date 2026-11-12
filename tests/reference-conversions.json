@@ -1,0 +1,57 @@
+{
+ "sample.docx": {
+  "ok": true,
+  "markdown": "Docx Head\n\nHello from docx body",
+  "title": null
+ },
+ "sample.xlsx": {
+  "ok": true,
+  "markdown": "## Data\n| Name | Value |\n| --- | --- |\n| alpha | 1 |\n| beta | 2 |",
+  "title": null
+ },
+ "sample.pptx": {
+  "ok": true,
+  "markdown": "<!-- Slide number: 1 -->\nHello from pptx title\nSecond bullet line",
+  "title": null
+ },
+ "sample.html": {
+  "ok": true,
+  "markdown": "# Hi\n\nPara",
+  "title": "T"
+ },
+ "sample.csv": {
+  "ok": true,
+  "markdown": "| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |",
+  "title": null
+ },
+ "sample.json": {
+  "ok": true,
+  "markdown": "{\"name\": \"markitdown\", \"n\": 42}",
+  "title": null
+ },
+ "sample.txt": {
+  "ok": true,
+  "markdown": "plain text here\n",
+  "title": null
+ },
+ "sample.md": {
+  "ok": true,
+  "markdown": "# MD Title\n\ncontent _here_\n",
+  "title": null
+ },
+ "sample.pdf": {
+  "ok": true,
+  "markdown": "Hello markitdown\n\n",
+  "title": null
+ },
+ "sample.epub": {
+  "ok": true,
+  "markdown": "**Title:** EPUB Fixture\n\n# Chapter One\n\nEPUB body text",
+  "title": "EPUB Fixture"
+ },
+ "sample.zip": {
+  "ok": true,
+  "markdown": "Content from the zip file `sample.zip`:\n\n## File: readme.txt\n\nreadme inside zip\n\n## File: notes.md\n\n# notes\n\nin a zip",
+  "title": null
+ }
+}

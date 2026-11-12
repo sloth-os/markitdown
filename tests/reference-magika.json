@@ -1,0 +1,130 @@
+{
+ "sample.csv": {
+  "label": "csv",
+  "mime_type": "text/csv",
+  "is_text": true,
+  "extensions": [
+   "csv"
+  ],
+  "score": 0.9999867677688599,
+  "dl_label": "csv",
+  "status": "ok"
+ },
+ "sample.docx": {
+  "label": "docx",
+  "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "is_text": false,
+  "extensions": [
+   "docx",
+   "docm"
+  ],
+  "score": 0.9998244643211365,
+  "dl_label": "docx",
+  "status": "ok"
+ },
+ "sample.epub": {
+  "label": "epub",
+  "mime_type": "application/epub+zip",
+  "is_text": false,
+  "extensions": [
+   "epub"
+  ],
+  "score": 0.9999918937683105,
+  "dl_label": "epub",
+  "status": "ok"
+ },
+ "sample.html": {
+  "label": "html",
+  "mime_type": "text/html",
+  "is_text": true,
+  "extensions": [
+   "html",
+   "htm",
+   "xhtml",
+   "xht"
+  ],
+  "score": 0.9388808012008667,
+  "dl_label": "html",
+  "status": "ok"
+ },
+ "sample.json": {
+  "label": "jsonl",
+  "mime_type": "application/json",
+  "is_text": true,
+  "extensions": [
+   "jsonl",
+   "jsonld"
+  ],
+  "score": 0.5629406571388245,
+  "dl_label": "jsonl",
+  "status": "ok"
+ },
+ "sample.md": {
+  "label": "txt",
+  "mime_type": "text/plain",
+  "is_text": true,
+  "extensions": [
+   "txt"
+  ],
+  "score": 0.7318997383117676,
+  "dl_label": "markdown",
+  "status": "ok"
+ },
+ "sample.pdf": {
+  "label": "pdf",
+  "mime_type": "application/pdf",
+  "is_text": false,
+  "extensions": [
+   "pdf"
+  ],
+  "score": 0.9996501207351685,
+  "dl_label": "pdf",
+  "status": "ok"
+ },
+ "sample.pptx": {
+  "label": "pptx",
+  "mime_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "is_text": false,
+  "extensions": [
+   "pptx",
+   "pptm"
+  ],
+  "score": 0.9997153878211975,
+  "dl_label": "pptx",
+  "status": "ok"
+ },
+ "sample.txt": {
+  "label": "txt",
+  "mime_type": "text/plain",
+  "is_text": true,
+  "extensions": [
+   "txt"
+  ],
+  "score": 0.4919581115245819,
+  "dl_label": "asm",
+  "status": "ok"
+ },
+ "sample.xlsx": {
+  "label": "xlsx",
+  "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "is_text": false,
+  "extensions": [
+   "xlsx",
+   "xlsm"
+  ],
+  "score": 0.9995224475860596,
+  "dl_label": "xlsx",
+  "status": "ok"
+ },
+ "sample.zip": {
+  "label": "zip",
+  "mime_type": "application/zip",
+  "is_text": false,
+  "extensions": [
+   "zip"
+  ],
+  "score": 0.9910253286361694,
+  "dl_label": "zip",
+  "status": "ok"
+ }
+}

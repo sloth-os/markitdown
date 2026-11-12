@@ -1,0 +1,125 @@
+# SPDX-License-Identifier: MIT
+#
+# Weekly deploy of the markitdown WASM build to GitHub Pages.
+#
+# Every Monday (03:00 UTC) — or on demand — this workflow:
+#   1. checks out the latest microsoft/markitdown main
+#   2. builds the wheel and assembles the full site (pyodide runtime,
+#      vendored wheels, onnxruntime-web, magika model, PWA shell)
+#   3. runs the browser end-to-end test against the built site
+#   4. publishes to GitHub Pages
+#
+# The deployed site is an installable PWA that works offline and registers
+# as an OS file handler for documents (see manifest.webmanifest file_handlers).
+
+name: Deploy WASM build to Pages
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # weekly, Mondays 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      markitdown_ref:
+        description: "microsoft/markitdown ref to build from"
+        required: false
+        default: "main"
+        type: string
+  # Allow manual pushes to main to deploy too.
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+
+# Grant only what Pages deployment needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Avoid overlapping deploys; a new weekly run replaces the queued one.
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+env:
+  PYODIDE_VERSION: "0.29.5"
+  ORT_VERSION: "1.31.1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout site repo
+        uses: actions/checkout@v4
+
+      - name: Checkout markitdown (upstream)
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/markitdown
+          ref: ${{ inputs.markitdown_ref || 'main' }}
+          path: upstream-markitdown
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build site
+        run: |
+          bash scripts/build-site.sh "$GITHUB_WORKSPACE/upstream-markitdown"
+
+      - name: Verify service worker precache covers every asset
+        run: |
+          python3 - <<'PY'
+          import os, re, sys
+          sw = open("site/sw.js").read()
+          urls = re.findall(r'"(\./[^"]+)"', sw)
+          shell = re.findall(r'"([^"]+)"', re.search(r"const APP_SHELL = \[(.*?)\];", sw, re.S).group(1))
+          all_urls = [u for u in urls] + [u for u in shell]
+          missing = [u for u in all_urls if not os.path.exists(os.path.join("site", u.lstrip("./")))]
+          site_files = {
+              os.path.relpath(os.path.join(r, f), "site")
+              for r, _, fs in os.walk("site")
+              for f in fs
+          } - {"sw.js"}
+          covered = {u.lstrip("./") for u in all_urls}
+          uncovered = site_files - covered
+          if missing or uncovered:
+              print("missing:", missing)
+              print("uncovered:", uncovered)
+              sys.exit(1)
+          print(f"precache covers all {len(site_files)} assets")
+          PY
+
+      - name: Run browser end-to-end tests
+        run: |
+          cd tests
+          npm install --no-save playwright@1.65.0
+          npx playwright install chromium --with-deps
+          python3 -m http.server 8977 --directory ../site &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8977/ > /dev/null && break
+            sleep 1
+          done
+          TEST_BASE_URL=http://localhost:8977/ node e2e-test.mjs
+          kill $SERVER_PID
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

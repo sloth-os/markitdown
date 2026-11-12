@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MarkItDown Web — convert documents to Markdown, offline</title>
+  <meta name="description" content="Convert PDF, DOCX, PPTX, XLSX, HTML, CSV and more to Markdown entirely in your browser. Works offline. Powered by markitdown compiled to WebAssembly." />
+  <meta name="theme-color" content="#1a2332" />
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-64.png" sizes="64x64" />
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon-64.png" alt="" width="28" height="28" />
+      <h1>MarkItDown <span class="badge" id="md-version">Web</span></h1>
+    </div>
+    <div class="status">
+      <span id="engine-status" class="status-pill" data-state="loading"
+ title="WASM engine status">⏳ loading engine…</span>
+      <span id="offline-status" class="status-pill subtle" data-state="online"
+            title="Network status">online</span>
+    </div>
+  </header>
+
+  <main>
+    <section id="dropzone" class="dropzone" tabindex="0" role="button"
+             aria-label="Drop a file here or click to choose">
+      <svg class="dz-icon" viewBox="0 0 24 24" width="42" height="42" aria-hidden="true">
+        <path fill="currentColor" d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-5H3v5a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-5h-2zM11 5.83 8.41 8.41 7 7l5-5 5 5-1.41 1.41L13 5.83V16h-2V5.83z"/>
+      </svg>
+      <p class="dz-title">Drop a file,<label for="file-input" class="link">browse</label><span id="paste-hint">, or paste</span></p>
+      <p class="dz-sub">PDF · DOCX · PPTX · XLSX · XLS · HTML · CSV · JSON · EPUB · IPYNB · ZIP · Outlook MSG · text &amp; more</p>
+      <input id="file-input" type="file" hidden multiple
+ accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.csv,.json,.html,.htm,.xml,.md,.markdown,.txt,.text,.log,.yaml,.yml,.toml,.ini,.rss,.atom,.epub,.ipynb,.py,.js,.ts,.rs,.go,.java,.c,.cpp,.h,.sh,.zip,.msg" />
+    </section>
+
+    <section id="file-list" class="file-list" hidden>
+      <h2>Queue</h2>
+      <ul id="queue"></ul>
+      <button id="clear-queue" class="btn subtle small">clear queue</button>
+    </section>
+
+    <section id="result" class="result" hidden>
+      <div class="result-head">
+        <h2 id="result-title" class="result-title" title="Converted file">—</h2>
+        <div class="result-actions">
+          <button id="copy-btn" class="btn">Copy Markdown</button>
+          <button id="download-btn" class="btn">Download .md</button>
+          <button id="toggle-render-btn" class="btn subtle">Preview</button>
+        </div>
+      </div>
+      <div id="error-box" class="error-box" hidden></div>
+      <pre id="markdown-out" class="markdown-out" tabindex="0"></pre>
+      <div id="rendered-out" class="rendered-out" hidden></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>
+      Everything runs locally in your browser via WebAssembly — files never leave your device.
+      Built from <a href="https://github.com/microsoft/markitdown" rel="noopener">microsoft/markitdown</a>,
+      served weekly as a PWA from
+      <a href="https://github.com/sloth-os/markitdown" rel="noopener">sloth-os/markitdown</a>.
+    </p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

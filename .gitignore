@@ -1,0 +1,15 @@
+# Build outputs
+site/
+dist/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Test tooling installed into tests/
+node_modules/
+package.json
+package-lock.json
+
+# OS noise
+.DS_Store
