@@ -1,4 +1,13 @@
 /* SPDX-License-Identifier: MIT */
+/* The [hidden] attribute must always win over any author display rule
+   (e.g. .result { display: flex }) — without this, author-level display
+   declarations beat the UA stylesheet's [hidden] { display: none } in the
+   cascade and "hidden" panels (like the result panel before the first
+   conversion) still lay out on screen. */
+[hidden] {
+  display: none !important;
+}
+
 :root {
   --bg: #12161f;
   --bg-soft: #1a2332;
@@ -181,6 +190,25 @@ main {
 .btn.subtle:hover { border-color: var(--accent); background: transparent; }
 .btn.small { padding: 4px 10px; font-size: .76rem; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Checkbox toggle (keep data URIs) — styled to sit alongside the buttons */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: .82rem;
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+.toggle:hover { border-color: var(--accent); color: var(--fg); }
+.toggle input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; cursor: pointer; }
+.toggle:has(input:checked) { color: var(--fg); border-color: var(--accent); }
 
 .error-box {
   background: rgba(224, 93, 93, .12);

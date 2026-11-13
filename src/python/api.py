@@ -138,11 +138,17 @@ def convert(
     charset: Optional[str] = None,
     filename: Optional[str] = None,
     magika_prediction: Optional[dict] = None,
+    keep_data_uris: bool = False,
 ) -> dict:
     """Convert ``data`` (raw file bytes) to markdown.
 
     ``magika_prediction`` is the JS-side magika result dict:
  ``{"label": ..., "mime_type": ..., "is_text": ..., "extensions": [...]}``.
+
+    ``keep_data_uris`` mirrors the CLI flag of the same name: by default
+    markitdown truncates embedded base64 images (``data:...;base64,...``)
+    to ``data:...;base64...`` in the output; with this enabled the raw
+    image data is retained in the markdown.
     """
     if _mdm is None:
         raise RuntimeError("call initialize() first")
@@ -168,8 +174,14 @@ def convert(
     )
     stream_info = StreamInfo(**{k: v for k, v in base.items() if v})
 
+    converter_kwargs: dict[str, Any] = {}
+    if keep_data_uris:
+        converter_kwargs["keep_data_uris"] = True
+
     try:
-        result = _mdm.convert_stream(stream, stream_info=stream_info)
+        result = _mdm.convert_stream(
+            stream, stream_info=stream_info, **converter_kwargs
+        )
     except Exception as exc:  # surface a readable error to JS
         return {
             "ok": False,

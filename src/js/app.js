@@ -38,6 +38,7 @@ const els = {
   copyBtn: $("copy-btn"),
   downloadBtn: $("download-btn"),
   toggleRenderBtn: $("toggle-render-btn"),
+  keepDataUris: $("keep-data-uris"),
   pasteHint: $("paste-hint"),
 };
 
@@ -68,6 +69,93 @@ function fmtSize(bytes) {
 }
 
 // ---------------------------------------------------------------------------
+// "keep data URIs" option (the CLI's --keep-data-uris):
+// by default markitdown truncates embedded base64 images to `data:...;base64...`;
+// when enabled, the raw image data is retained in the markdown. Persisted so
+// the choice survives reloads; the File object is kept on the queue entry so
+// flipping the switch can re-convert the file being viewed.
+// ---------------------------------------------------------------------------
+const KEEP_URIS_KEY = "markitdown-web:keep-data-uris";
+
+function restoreKeepDataUris() {
+  if (!els.keepDataUris) return;
+  let stored = null;
+  try {
+    stored = localStorage.getItem(KEEP_URIS_KEY);
+  } catch { /* private mode / storage disabled — just use the default */ }
+  els.keepDataUris.checked = stored === "1";
+}
+
+restoreKeepDataUris();
+
+function keepDataUrisEnabled() {
+  return !!(els.keepDataUris && els.keepDataUris.checked);
+}
+
+async function reconvertCurrent() {
+  // Re-run the job being viewed with the new setting (used when the
+  // keep-data-URIs checkbox changes).
+  //
+  // If the viewed job is ALREADY converting — either a prior reconvert or its
+  // initial conversion from the enqueue loop — there is nothing to do: every
+  // conversion pass reads the checkbox value at the moment of the Python call
+  // (engine.convertFile → keepDataUrisEnabled(), after the arrayBuffer and
+  // magika awaits). A flip dispatched before that point is absorbed by the
+  // in-flight pass itself (its output already reflects the new setting); a
+  // flip dispatched during the synchronous WASM window cannot run until the
+  // pass completes, at which point job.state is settled and the next flip
+  // takes the normal reconvert path. No pending-flip bookkeeping — and
+  // therefore no mis-targeted or stranded flags.
+  const job = queue[activeJob];
+  if (!job) return;
+  if (job.state === "busy") return;
+  await reconvertJob(job);
+}
+
+async function reconvertJob(job) {
+  // One conversion pass on `job`: mark busy, convert, settle state, re-render.
+  // Shared by the keep-data-URIs change handler (settled jobs) and the
+  // enqueue loop (initial conversions) so both paths write job state through
+  // one code path.
+  job.state = "busy";
+  renderQueue();
+  try {
+    const res = await engine.convertFile(job.file);
+    if (res.ok) {
+      job.state = "done";
+      job.markdown = res.markdown;
+      job.title = res.title;
+    } else {
+      job.state = "error";
+      job.error = res.error || "conversion failed";
+    }
+  } catch (e) {
+    job.state = "error";
+    job.error = String(e);
+  } finally {
+    renderQueue();
+    // Refresh the result panel ONLY when the settled job is the one being
+    // viewed (identity, not index: after a clear-queue + re-drop the index
+    // may belong to a different job entirely). A background job's settle
+    // must never touch the viewed panel — showJob resets the pane state
+    // (markdown shown, preview hidden, button label), so an unconditional
+    // call here would yank the user out of the rendered preview mode on
+    // every background settle. The enqueue loop below handles the
+    // first-result auto-display case.
+    if (queue[activeJob] === job) showJob(activeJob);
+  }
+}
+
+if (els.keepDataUris) {
+  els.keepDataUris.addEventListener("change", () => {
+    try {
+      localStorage.setItem(KEEP_URIS_KEY, els.keepDataUris.checked ? "1" : "0");
+    } catch { /* best effort */ }
+    reconvertCurrent();
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Engine: pyodide + markitdown + magika
 // ---------------------------------------------------------------------------
 const engine = {
@@ -79,8 +167,16 @@ const engine = {
 
   async boot() {
     if (this._readyPromise) return this._readyPromise;
-    this._readyPromise = this._boot();
-    return this._readyPromise;
+    const p = this._boot();
+    // Never cache a FAILED boot: enqueueFiles() re-triggers boot() on every
+    // drop, and a cached rejection would poison every later conversion (a
+    // drop while briefly offline → engine dead until page reload). Clear the
+    // cache on rejection so the next drop retries from scratch.
+    p.catch(() => {
+      if (this._readyPromise === p) this._readyPromise = null;
+    });
+    this._readyPromise = p;
+    return p;
   },
 
   async _boot() {
@@ -201,12 +297,42 @@ const engine = {
       }
     }
 
-    return await this.api.convert.callKwargs(bytes, {
-      mimetype,
-      extension,
-      filename: file.name,
-      magika_prediction: prediction,
-    });
+    // keep_data_uris is sent ONLY when enabled. The service worker serves
+    // cache-first with background revalidation, so right after a weekly
+    // deploy a session can briefly run a fresh app.js against the stale
+    // cached python/api.py, whose convert() has no keep_data_uris param —
+    // sending it unconditionally would TypeError every conversion. Omitting
+    // it when false keeps that (and any old-cache) combination working;
+    // when true but unsupported, retry once without the kwarg.
+    const convertCall = (withKeep) => {
+      const kwargs = {
+        mimetype,
+        extension,
+        filename: file.name,
+        magika_prediction: prediction,
+      };
+      if (withKeep) kwargs.keep_data_uris = true;
+      return this.api.convert.callKwargs(bytes, kwargs);
+    };
+    let res;
+    if (keepDataUrisEnabled()) {
+      try {
+        res = await convertCall(true);
+      } catch (e) {
+        if (/keep_data_uris/.test(String(e))) {
+          // Stale api.py without the param: retry as a plain (truncating)
+          // conversion rather than erroring the row. The one-shot toggle
+          // lands when the SW cache updates and the page reloads.
+          console.warn("api.convert does not support keep_data_uris; retrying without it:", e);
+          res = await convertCall(false);
+        } else {
+          throw e;
+        }
+      }
+    } else {
+      res = await convertCall(false);
+    }
+    return res;
   },
 };
 
@@ -263,15 +389,37 @@ function showJob(i) {
     els.markdownOut.textContent = "";
     els.markdownOut.hidden = false;
     els.renderedOut.hidden = true;
+    els.toggleRenderBtn.textContent = "Preview";
+    // Drop the PREVIOUS file's preview DOM: renderPreview() only ever runs on
+    // the success path, so #rendered-out still holds whatever was viewed last.
+    // Left in place, one click on the (correctly labelled) "Preview" button
+    // would reveal another document's rendered output under this file's title
+    // and error box — wrong content attributed to the wrong file. Disable the
+    // toggle too: there is nothing to preview, and a disabled button beats an
+    // empty pane. The success path re-enables it.
+    els.renderedOut.replaceChildren();
+    els.toggleRenderBtn.disabled = true;
     return;
   }
   els.errorBox.hidden = true;
+  els.toggleRenderBtn.disabled = false;
   const md = job.markdown ?? "";
   els.markdownOut.textContent = md;
-  els.markdownOut.hidden = false;
-  els.renderedOut.hidden = true;
-  els.toggleRenderBtn.textContent = "Preview";
   renderPreview(md);
+  // Preserve the user's raw/preview choice across viewed-job refreshes
+  // (flip-triggered reconvert settles) AND row switches: the button label
+  // encodes the current mode ("Preview" = showing raw, "Raw markdown" =
+  // showing the rendered preview) and is only ever rewritten by the toggle
+  // click handler, so deriving the pane state from it keeps the chosen
+  // mode until the user explicitly toggles. Error rows always show the raw
+  // pane (above) since there is nothing to preview.
+  if (els.toggleRenderBtn.textContent === "Raw markdown") {
+    els.markdownOut.hidden = true;
+    els.renderedOut.hidden = false;
+  } else {
+    els.markdownOut.hidden = false;
+    els.renderedOut.hidden = true;
+  }
 }
 
 function renderPreview(md) {
@@ -332,8 +480,8 @@ function renderPreview(md) {
 async function enqueueFiles(fileList) {
   const files = Array.from(fileList).filter(Boolean);
   if (files.length === 0) return;
-  const firstNew = queue.length;
-  for (const f of files) queue.push({ file: f, state: "queued" });
+  const jobs = files.map((f) => ({ file: f, state: "queued" }));
+  for (const j of jobs) queue.push(j);
   renderQueue();
 
   // Kick the engine download in the background as soon as files arrive so
@@ -344,27 +492,33 @@ async function enqueueFiles(fileList) {
     toast("engine failed to load: " + e.message, true);
   });
 
-  for (let i = firstNew; i < queue.length; i++) {
-    const job = queue[i];
-    job.state = "busy";
-    renderQueue();
-    try {
-      const res = await engine.convertFile(job.file);
-      if (res.ok) {
-        job.state = "done";
-        job.markdown = res.markdown;
-        job.title = res.title;
-      } else {
-        job.state = "error";
-        job.error = res.error || "conversion failed";
-      }
-    } catch (e) {
-      job.state = "error";
-      job.error = String(e);
+  // Iterate THIS BATCH's job objects (identity), never queue indices: after
+  // a clear-queue + re-drop while this loop was parked on an in-flight
+  // conversion, index-based iteration would walk the NEW queue's rows —
+  // converting them out of order alongside the new batch's own loop and
+  // auto-displaying the wrong "first" result. A job no longer in the queue
+  // was cleared away: skip it; its detached pass (if any) settles harmlessly
+  // (reconvertJob's identity-keyed finally and the indexOf guard below both
+  // ignore cleared jobs).
+  for (const job of jobs) {
+    // A keep-data-URIs flip may have taken over a QUEUED job out of order
+    // (reconvertJob runs immediately on queued jobs) and finished it while
+    // earlier jobs were still converting. Never convert the same job twice:
+    // skip anything that already settled. (A job still "busy" here can only
+    // be one such takeover still in flight — likewise skip it.)
+    if (job.state !== "queued") continue;
+    if (!queue.includes(job)) continue; // cleared away mid-flight
+    await reconvertJob(job);
+    // Auto-display the first result only while nothing has been selected
+    // (the first showJob sets activeJob, so later settles never yank). Use
+    // the job's CURRENT index, never one captured before the long awaits:
+    // indexOf() is -1 for a cleared-away job → no-op, so a detached settle
+    // can never reveal the panel on a still-busy row's empty markdown.
+    // Refresh of the VIEWED job on settle is reconvertJob's finally guard.
+    if (activeJob === -1) {
+      const idx = queue.indexOf(job);
+      if (idx !== -1) showJob(idx);
     }
-    renderQueue();
-    if (activeJob === -1) showJob(firstNew);
-    else if (activeJob === i) showJob(i);
   }
 }
 
@@ -463,7 +617,11 @@ els.toggleRenderBtn.addEventListener("click", () => {
   const showingMd = !els.markdownOut.hidden;
   els.markdownOut.hidden = showingMd;
   els.renderedOut.hidden = !showingMd;
-  els.toggleRenderBtn.textContent = showingMd ? "Preview" : "Raw markdown";
+  // Label names what the click switches TO next, i.e. the OPPOSITE of the
+  // pane now shown — and showJob() re-derives the pane from this label, so
+  // getting it backwards makes every viewed-job refresh snap back to raw
+  // markdown (the preview-yank regression the race probe asserts against).
+  els.toggleRenderBtn.textContent = showingMd ? "Raw markdown" : "Preview";
 });
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,54 @@
 {
+ "sample-img.docx": {
+  "label": "docx",
+  "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "is_text": false,
+  "extensions": [
+   "docx",
+   "docm"
+  ],
+  "score": 0.999893307685852,
+  "dl_label": "docx",
+  "status": "ok"
+ },
+ "sample-img.html": {
+  "label": "html",
+  "mime_type": "text/html",
+  "is_text": true,
+  "extensions": [
+   "html",
+   "htm",
+   "xhtml",
+   "xht"
+  ],
+  "score": 0.9923750758171082,
+  "dl_label": "html",
+  "status": "ok"
+ },
+ "sample-img.pptx": {
+  "label": "pptx",
+  "mime_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "is_text": false,
+  "extensions": [
+   "pptx",
+   "pptm"
+  ],
+  "score": 0.9982088804244995,
+  "dl_label": "pptx",
+  "status": "ok"
+ },
+ "sample-img.xlsx": {
+  "label": "xlsx",
+  "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "is_text": false,
+  "extensions": [
+   "xlsx",
+   "xlsm"
+  ],
+  "score": 0.999790370464325,
+  "dl_label": "xlsx",
+  "status": "ok"
+ },
  "sample.csv": {
   "label": "csv",
   "mime_type": "text/csv",
@@ -125,6 +175,28 @@
   ],
   "score": 0.9910253286361694,
   "dl_label": "zip",
+  "status": "ok"
+ },
+ "tiny-blue.png": {
+  "label": "png",
+  "mime_type": "image/png",
+  "is_text": false,
+  "extensions": [
+   "png"
+  ],
+  "score": 0.99996018409729,
+  "dl_label": "png",
+  "status": "ok"
+ },
+ "tiny-red.png": {
+  "label": "png",
+  "mime_type": "image/png",
+  "is_text": false,
+  "extensions": [
+   "png"
+  ],
+  "score": 0.9999663829803467,
+  "dl_label": "png",
   "status": "ok"
  }
 }

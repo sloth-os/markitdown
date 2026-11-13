@@ -49,6 +49,11 @@
       <div class="result-head">
         <h2 id="result-title" class="result-title" title="Converted file">—</h2>
         <div class="result-actions">
+          <label class="toggle" for="keep-data-uris"
+                 title="Keep embedded images as full base64 data URIs in the markdown instead of truncating them (same as the markitdown CLI's --keep-data-uris). Re-converts the current file and applies to new conversions.">
+            <input type="checkbox" id="keep-data-uris" />
+            <span>keep data URIs</span>
+          </label>
           <button id="copy-btn" class="btn">Copy Markdown</button>
           <button id="download-btn" class="btn">Download .md</button>
           <button id="toggle-render-btn" class="btn subtle">Preview</button>

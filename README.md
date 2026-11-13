@@ -21,6 +21,14 @@
   manager (Chrome/Edge on desktop, "Open in app" on Android) and the file
   arrives through the File Handling API (`launchQueue`).
 - Files **never leave the device** — conversion happens 100 % client-side.
+- **"keep data URIs" toggle.** By default markitdown truncates embedded
+  images to keep the markdown readable — DOCX/EPUB/HTML show a truncated
+  placeholder (`data:image/png;base64…` → `data:image/png;base64...`), while
+  PPTX substitutes the image's filename (`![image.png](Picture2.jpg)`).
+  Enable the toggle in the result view to retain the raw base64 image data
+  for all formats, matching the CLI's `--keep-data-uris`. Applies to
+  DOCX/EPUB/HTML (markdownify) and PPTX (direct emission), and re-converts
+  the file you're viewing when flipped. The choice is remembered per browser.
 - Updated **weekly** from upstream `microsoft/markitdown@main`, so new
   converters and fixes roll out automatically.
 
@@ -77,8 +85,9 @@ scope for the offline build.
 | `src/manifest.webmanifest` | PWA manifest incl. `file_handlers` |
 | `scripts/build-site.sh` | Assembles `site/` from all the pieces above |
 | `.github/workflows/deploy-pages.yml` | Weekly build + test + Pages deploy |
-| `tests/e2e-test.mjs` | Playwright end-to-end suite (boot, conversions vs Python reference, offline, manifest) |
-| `tests/fixtures/`, `tests/reference-*.json` | Test documents + outputs produced by native markitdown |
+| `tests/e2e-test.mjs` | Playwright end-to-end suite (boot, conversions vs Python reference, keep-data-URIs toggle, offline, manifest, JS-magika vs native-magika agreement) |
+| `tests/race-probe.mjs` | Playwright race probe for the keep-data-URIs reconvert path: deterministic mid-conversion toggle flips (stalled `arrayBuffer` + timed flips), view-yank, duplicate-conversion, clear-queue stale-index, error-pane and boot-retry scenarios (S1–S7) |
+| `tests/fixtures/`, `tests/reference-*.json` | Test documents + outputs produced by native markitdown (`reference-keep-data-uris.json` holds the `--keep-data-uris` outputs) |
 
 ## Building locally
 

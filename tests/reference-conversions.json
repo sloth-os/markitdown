@@ -53,5 +53,25 @@
   "ok": true,
   "markdown": "Content from the zip file `sample.zip`:\n\n## File: readme.txt\n\nreadme inside zip\n\n## File: notes.md\n\n# notes\n\nin a zip",
   "title": null
+ },
+ "sample-img.html": {
+  "ok": true,
+  "markdown": "# Images\n\nInline ![red dot](data:image/png;base64...) end.\n\n![big photo](https://example.com/big-photo.jpg \"Photo\")\n![lazy dot](data:image/png;base64...)",
+  "title": "Images"
+ },
+ "sample-img.docx": {
+  "ok": true,
+  "markdown": "Docx With Images\n\nBefore image\n\n![](data:image/png;base64...)\n\nBetween images\n\n![](data:image/png;base64...)\n\nAfter image",
+  "title": null
+ },
+ "sample-img.pptx": {
+  "ok": true,
+  "markdown": "<!-- Slide number: 1 -->\nPptx With Images\n\n![image.png](Picture2.jpg)\n\n<!-- Slide number: 2 -->\nSecond Slide\n\n![image.png](Picture2.jpg)",
+  "title": null
+ },
+ "sample-img.xlsx": {
+  "ok": true,
+  "markdown": "## Sheet1\n| name | value |\n| --- | --- |\n| alpha | 1 |\n| beta | 2 |",
+  "title": null
  }
 }
