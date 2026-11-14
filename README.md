@@ -29,6 +29,20 @@
   for all formats, matching the CLI's `--keep-data-uris`. Applies to
   DOCX/EPUB/HTML (markdownify) and PPTX (direct emission), and re-converts
   the file you're viewing when flipped. The choice is remembered per browser.
+- **Markdown preview pane.** The result view toggles between the raw markdown
+  (authoritative — byte-for-byte what markitdown emitted) and a rendered
+  preview: headings, paragraphs, bold, emphasis, inline code, fenced code,
+  ordered and unordered lists, blockquotes, horizontal rules, tables, links and
+  embedded images. An image whose payload survived the conversion renders inline in
+  keep-data-URIs mode; where it did not — truncated placeholder, PPTX filename
+  substitution, or a remote URL that can't be reached while offline — the
+  preview shows a labelled stand-in instead of a broken-image icon. Nothing on
+  this path parses HTML: converted documents are untrusted input, so every
+  fragment of them lands in a text node, never in the DOM as markup.
+  The preview is deliberately minimal — a construct it doesn't model (a nested
+  list, `~~strikethrough~~`, a setext heading) degrades to plain text rather
+  than being dropped or guessed at, and the raw pane always has the exact bytes
+  markitdown emitted.
 - Updated **weekly** from upstream `microsoft/markitdown@main`, so new
   converters and fixes roll out automatically.
 
@@ -77,7 +91,7 @@ scope for the offline build.
 | Path | What |
 |---|---|
 | `src/index.html`, `src/styles.css` | App shell (drop zone, queue, result view) |
-| `src/js/app.js` | Engine boot, queue, drag&drop/paste, `launchQueue` file handling |
+| `src/js/app.js` | Engine boot, queue, drag&drop/paste, `launchQueue` file handling, markdown preview renderer |
 | `src/js/magika.js` | magika re-implementation on onnxruntime-web |
 | `src/js/ort-setup.js` | Loads onnxruntime-web, configures single-thread wasm |
 | `src/js/sw-template.js` | Service worker template (precache manifest injected at build) |
@@ -85,8 +99,8 @@ scope for the offline build.
 | `src/manifest.webmanifest` | PWA manifest incl. `file_handlers` |
 | `scripts/build-site.sh` | Assembles `site/` from all the pieces above |
 | `.github/workflows/deploy-pages.yml` | Weekly build + test + Pages deploy |
-| `tests/e2e-test.mjs` | Playwright end-to-end suite (boot, conversions vs Python reference, keep-data-URIs toggle, offline, manifest, JS-magika vs native-magika agreement) |
-| `tests/race-probe.mjs` | Playwright race probe for the keep-data-URIs reconvert path: deterministic mid-conversion toggle flips (stalled `arrayBuffer` + timed flips), view-yank, duplicate-conversion, clear-queue stale-index, error-pane and boot-retry scenarios (S1–S7) |
+| `tests/e2e-test.mjs` | Playwright end-to-end suite (boot, conversions vs Python reference, keep-data-URIs toggle, offline, manifest, JS-magika vs native-magika agreement, preview-pane DOM over converted fixtures and over synthetic markdown fed to the real `renderPreview` — including hostile-input and render-time bounds) |
+| `tests/race-probe.mjs` | Playwright race probe for the keep-data-URIs reconvert path: deterministic mid-conversion toggle flips (stalled `arrayBuffer` + timed flips), view-yank, duplicate-conversion, clear-queue stale-index, error-pane and boot-retry scenarios (S1–S7). Not wired into the deploy workflow — run it by hand before touching the queue or reconvert logic |
 | `tests/fixtures/`, `tests/reference-*.json` | Test documents + outputs produced by native markitdown (`reference-keep-data-uris.json` holds the `--keep-data-uris` outputs) |
 
 ## Building locally
@@ -98,11 +112,19 @@ bash scripts/build-site.sh [path/to/markitdown]
 # serve + test
 python3 -m http.server 8977 --directory site &
 cd tests && TEST_BASE_URL=http://localhost:8977/ node e2e-test.mjs
+
+# race probe (optional; not run by CI), from tests/ with its own port
+python3 -m http.server 8933 --directory ../site &
+PROBE_BASE_URL=http://localhost:8933/ node race-probe.mjs
 ```
+
+Both suites drive the production source: `site/app.js` is a verbatim copy of
+`src/js/app.js`, and the e2e suite imports `renderPreview` straight out of it,
+so there is no test-only copy of the renderer to drift.
 
 The deploy workflow runs the same script against a fresh checkout of
 `microsoft/markitdown@main` every Monday 03:00 UTC, then publishes only if
-the end-to-end tests pass.
+`tests/e2e-test.mjs` passes (the race probe is not part of that gate).
 
 ## PWA notes
 
