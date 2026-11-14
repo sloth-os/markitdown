@@ -239,8 +239,13 @@ main {
   word-break: break-word;
 }
 
-.rendered-out { font-size: .92rem; }
-.rendered-out h1, .rendered-out h2, .rendered-out h3 { line-height: 1.25; }
+/* break-word like the raw pane: a long unbreakable run (a URL in prose, a
+   stray token) must wrap rather than widen the pane and force horizontal
+   scroll on the whole result view. */
+.rendered-out { font-size: .92rem; overflow-wrap: break-word; }
+.rendered-out h1, .rendered-out h2, .rendered-out h3,
+.rendered-out h4, .rendered-out h5, .rendered-out h6 { line-height: 1.25; }
+.rendered-out pre { overflow: auto; }
 .rendered-out table { border-collapse: collapse; margin: 12px 0; }
 .rendered-out th, .rendered-out td {
   border: 1px solid var(--border);
@@ -254,7 +259,38 @@ main {
   font-size: .85em;
 }
 .rendered-out pre code { display: block; padding: 10px; overflow: auto; }
-.rendered-out img { max-width: 100%; }
+.rendered-out img { max-width: 100%; height: auto; }
+.rendered-out p,
+.rendered-out ul,
+.rendered-out ol,
+.rendered-out blockquote { margin: 0 0 10px; }
+.rendered-out ul, .rendered-out ol { padding-left: 22px; }
+.rendered-out li { margin: 2px 0; }
+.rendered-out hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+}
+.rendered-out blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 12px;
+  color: var(--fg-dim);
+}
+.rendered-out a { color: var(--accent); }
+/* Stand-in for an embedded image that carries no renderable payload: a
+   truncated data URI (default keep-data-URIs mode), a source this preview
+   refuses to load, or one whose fetch failed (remote URL while offline, or
+   PPTX's filename-only substitution). */
+.rendered-out .img-placeholder {
+  display: inline-block;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 4px 9px;
+  margin: 2px 0;
+  font-size: .8rem;
+  color: var(--fg-dim);
+  cursor: help;
+}
 
 /* ---- Footer ---- */
 .footer {

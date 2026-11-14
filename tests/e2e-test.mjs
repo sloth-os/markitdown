@@ -299,6 +299,345 @@ for (const [name, ref] of Object.entries(REFERENCE_MAGIKA)) {
     match ? '' : `got ${JSON.stringify({ l: got.label, m: got.mime_type, s: +got.score?.toFixed(4) })} vs ref ${JSON.stringify({ l: ref.label, m: ref.mime_type, s: +ref.score?.toFixed(4) })}`);
 }
 
+console.log('== 9. preview pane renders real DOM ==');
+// NOTE: the queue is in-memory, so the section-5 reload left it EMPTY — this
+// section converts its own fixtures rather than reusing earlier rows. The
+// toggle is left ON by that section (persisted to localStorage), so new
+// conversions arrive in keep mode.
+//
+// showJob() calls renderPreview() on the success path even while the RAW pane
+// is shown, so #rendered-out always reflects the focused row — no need to
+// click the toggle.
+//
+// The regression this section gates: renderPreview used to push HTML STRINGS
+// that the append loop turned into text nodes, so tables were the only thing
+// that rendered. Every other branch reached the user as literal markup —
+// "<h1>Images</h1>", "**Title:**" — and images had no branch at all. These
+// assertions fail against that version: they require real elements AND
+// forbid the markup leaking as visible text.
+const convertFixture = async (name) => {
+  await page.setInputFiles('#file-input', path.join(FIXTURES, name));
+  await page.waitForFunction(
+    (fname) => {
+      for (const li of document.querySelectorAll('#queue li')) {
+        const nm = li.querySelector('.name')?.textContent;
+        const st = li.querySelector('.qstate')?.dataset.state;
+        if (nm === fname && (st === 'done' || st === 'error')) return true;
+      }
+      return false;
+    }, name, { timeout: 60_000 }
+  );
+};
+const previewOf = async (name) => {
+  await convertFixture(name);
+  await page.evaluate((fname) => {
+    for (const li of document.querySelectorAll('#queue li')) {
+      if (li.querySelector('.name')?.textContent === fname) li.click();
+    }
+  }, name);
+  return page.evaluate(() => {
+    const el = document.getElementById('rendered-out');
+    return {
+      counts: {
+        h: el.querySelectorAll('h1,h2,h3,h4,h5,h6').length,
+        strong: el.querySelectorAll('strong').length,
+        code: el.querySelectorAll('code').length,
+        pre: el.querySelectorAll('pre').length,
+        table: el.querySelectorAll('table').length,
+        tr: el.querySelectorAll('tr').length,
+        img: el.querySelectorAll('img').length,
+        a: el.querySelectorAll('a').length,
+        placeholder: el.querySelectorAll('.img-placeholder').length,
+      },
+      // Visible text of every TEXT NODE (not descendants' text), which is where
+      // escaped markup used to land.
+      textNodes: (function collect(n) {
+        let acc = [];
+        for (const c of n.childNodes) {
+          if (c.nodeType === 3) acc.push(c.textContent);
+          else if (c.nodeType === 1) acc = acc.concat(collect(c));
+        }
+        return acc;
+      }(el)),
+      imgSrcs: [...el.querySelectorAll('img')].map((i) => i.getAttribute('src') || ''),
+      innerHTML: el.innerHTML,
+      paneHidden: el.hidden,
+    };
+  });
+};
+// No literal markdown/HTML syntax may be visible as text. Deliberately broad:
+// the first version of this pattern only anchored `\*\*` at the start of a text
+// node, so a leaked `see **this** ok` slipped through, and it required a leading
+// `!` for links, so `[Next](page2.html)` did too. These are the exact residue
+// shapes the renderer produces when a token fails to parse.
+const NO_LEAKED_MARKUP =
+  /<\s*(h\d|strong|code|pre|li|img|table|p|u)\b|\*\*|!\[[^\]]*\]\(|\]\(|\[[^\]]*\]\(|<h\d>|~~/;
+const noLeak = (p) => !p.textNodes.some((t) => NO_LEAKED_MARKUP.test(t));
+
+{
+  const p = await previewOf('sample.csv');
+  check('preview: csv renders a real <table>',
+    p.counts.table === 1 && p.counts.tr === 3, JSON.stringify(p.counts));
+  check('preview: csv leaks no markup as text', noLeak(p),
+    JSON.stringify(p.textNodes.slice(0, 3)));
+}
+{
+  const p = await previewOf('sample.md');
+  check('preview: md renders a real <h1>', p.counts.h === 1, JSON.stringify(p.counts));
+  check('preview: md heading text is the content, not the markup',
+    p.textNodes.some((t) => t.includes('MD Title')) && !p.innerHTML.includes('&lt;h1&gt;'),
+    p.innerHTML.slice(0, 80));
+}
+{
+  const p = await previewOf('sample.epub');
+  check('preview: epub renders real <strong>', p.counts.strong >= 1, JSON.stringify(p.counts));
+  check('preview: epub leaks no markup as text', noLeak(p),
+    JSON.stringify(p.textNodes.slice(0, 3)));
+}
+// Keep-mode images: two inline 1x1 PNG data URIs plus one REMOTE https URL,
+// which cannot resolve here and must degrade to a placeholder rather than a
+// broken-image icon.
+//
+// Two timing notes:
+//  * <img> carries loading="lazy", and a lazy image inside a display:none
+//    subtree never starts loading — so the pane MUST be revealed before its
+//    error can fire. (Eager loading would be wrong for keep-mode documents,
+//    where a single file can carry megabytes of base64 the user may never
+//    view.)
+//  * the degradation rides an async error event, so wait for the placeholder
+//    instead of sampling immediately.
+{
+  await previewOf('sample-img.html');
+  if (await page.evaluate(() => document.getElementById('rendered-out').hidden)) {
+    await page.click('#toggle-render-btn');
+  }
+  await page.waitForFunction(
+    () => document.querySelectorAll('#rendered-out .img-placeholder').length >= 1,
+    null, { timeout: 30_000 }
+  );
+  const p = await page.evaluate(() => {
+    const el = document.getElementById('rendered-out');
+    return {
+      img: el.querySelectorAll('img').length,
+      placeholder: el.querySelectorAll('.img-placeholder').length,
+      imgSrcs: [...el.querySelectorAll('img')].map((i) => i.getAttribute('src') || ''),
+      textNodes: (function collect(n) {
+        let acc = [];
+        for (const c of n.childNodes) {
+          if (c.nodeType === 3) acc.push(c.textContent);
+          else if (c.nodeType === 1) acc = acc.concat(collect(c));
+        }
+        return acc;
+      }(el)),
+      paneHidden: el.hidden,
+    };
+  });
+  check('preview: keep-mode html renders the two inline data-URI images',
+    p.img === 2, JSON.stringify({ img: p.img, ph: p.placeholder, paneHidden: p.paneHidden }));
+  check('preview: every rendered <img> src is a full base64 data URI',
+    p.imgSrcs.every((s) => FULL_URI_RE.test(s)),
+    JSON.stringify(p.imgSrcs.map((s) => s.slice(0, 40))));
+  check('preview: unreachable remote image degrades to a placeholder',
+    p.placeholder >= 1, JSON.stringify({ img: p.img, ph: p.placeholder }));
+  check('preview: html leaks no markup as text', noLeak(p),
+    JSON.stringify(p.textNodes.slice(0, 4)));
+}
+// The toggle is now in preview mode for the rest of the section; the two
+// placeholder cases below create their nodes synchronously (truncated URI and
+// non-renderable src), so they do not depend on a load attempt.
+// PPTX default mode substitutes the image's FILENAME (Picture2.jpg), which is
+// not a renderable src here and must become a placeholder — never an <img>
+// pointing at a nonexistent same-origin file.
+{
+  await page.evaluate(() => {
+    for (const li of document.querySelectorAll('#queue li')) {
+      if (li.querySelector('.name')?.textContent === 'sample-img.html') li.click();
+    }
+  });
+  await page.uncheck('#keep-data-uris');
+  await waitMarkdownMode('truncate');
+  const p = await previewOf('sample-img.pptx');
+  check('preview: pptx filename substitution renders a placeholder, not an <img>',
+    p.counts.img === 0 && p.counts.placeholder >= 1, JSON.stringify(p.counts));
+}
+// Truncated data URIs (default mode) carry no payload, so they must render a
+// placeholder that says so rather than a broken image.
+{
+  const p = await previewOf('sample-img.docx');
+  check('preview: truncated data URI renders a placeholder, not a broken <img>',
+    p.counts.img === 0 && p.counts.placeholder >= 1, JSON.stringify(p.counts));
+}
+
+console.log('== 10. preview renderer: synthetic markdown (real renderPreview) ==');
+// Section 9 exercises the renderer through converted fixtures, but those only
+// ever produce a handful of block types — no fixture yields a list, a link, a
+// code fence, a blockquote or an h2-h6, so a regression in any of those would
+// sail through. This section imports the ACTUAL renderPreview (app.js is a
+// module, so the re-import returns the live singleton, side effects already
+// run) and drives it with hand-built markdown that pins each construct plus
+// the specific regressions found in review.
+//
+// Non-vacuity: several of these assertions FAIL against both the old
+// string-pushing renderer AND intermediate versions of the rewrite (see the
+// per-case comments). They are written as DOM-shape + visible-text assertions,
+// so a construct that renders as literal text instead of an element fails.
+const renderMd = async (md) => page.evaluate(async (src) => {
+  const { renderPreview } = await import('./app.js');
+  const el = document.getElementById('rendered-out');
+  el.hidden = false; // lazy <img> never loads in a display:none subtree
+  renderPreview(src);
+  const collect = (n) => {
+    let acc = [];
+    for (const c of n.childNodes) {
+      if (c.nodeType === 3) acc.push(c.textContent);
+      else if (c.nodeType === 1) acc = acc.concat(collect(c));
+    }
+    return acc;
+  };
+  return {
+    counts: Object.fromEntries(['H1','H2','H3','H4','H5','H6','P','STRONG','EM','CODE','PRE','TABLE','THEAD','TBODY','TR','TH','TD','UL','OL','LI','BLOCKQUOTE','HR','IMG','A','BR'].map(
+      (t) => [t, el.querySelectorAll(t).length])),
+    text: el.textContent,
+    textNodes: collect(el),
+    html: el.innerHTML,
+    olStart: [...el.querySelectorAll('ol')].map((o) => o.getAttribute('start')),
+    imgSrcs: [...el.querySelectorAll('img')].map((i) => i.getAttribute('src') || ''),
+    hrefs: [...el.querySelectorAll('a')].map((a) => a.getAttribute('href') || ''),
+    placeholders: [...el.querySelectorAll('.img-placeholder')].map((s) => ({
+      t: s.textContent, title: s.getAttribute('title') || '',
+    })),
+  };
+}, md);
+const noScriptNodes = (p) => !/<script|<iframe|<object|<embed|onerror=/i.test(p.html);
+
+{
+  // Headings h2-h6 + inline strong/code inside a heading.
+  const p = await renderMd('## Sub\n### Third\n#### Four\n##### Five\n###### Six\n# Top with **bold** and `code`');
+  check('preview: renders h2 through h6 as distinct real elements',
+    p.counts.H2 === 1 && p.counts.H3 === 1 && p.counts.H4 === 1 && p.counts.H5 === 1
+      && p.counts.H6 === 1 && p.counts.H1 === 1 && p.counts.STRONG === 1 && p.counts.CODE === 1,
+    JSON.stringify(p.counts));
+  check('preview: heading text has no leftover # or markup',
+    p.text.includes('Sub') && !p.text.includes('#') && !p.text.includes('**') && !p.text.includes('`'),
+    p.text.slice(0, 60));
+}
+{
+  // Lists: ul, ol with a start attribute, mixed punctuation bullet that must
+  // NOT be eaten as an <hr> (review finding 7), and an indented continuation
+  // line that must stay INSIDE its item (review finding 11).
+  const p = await renderMd('* item\n* --\n* item2\n\n5. five\n6. six\n\n* Line one  \n  Line two');
+  check('preview: punctuation-only bullet stays a list item, not an <hr>',
+    p.counts.UL >= 1 && p.counts.LI >= 3 && p.counts.HR === 0,
+    JSON.stringify(p.counts));
+  check('preview: <ol start> honoured (5. five → start=5)',
+    p.counts.OL === 1 && p.olStart[0] === '5', JSON.stringify(p.olStart));
+  check('preview: indented continuation stays inside its <li>',
+    p.textNodes.some((t) => t.includes('Line two')) && !/<p>\s*Line two/i.test(p.html),
+    p.html.slice(0, 120));
+}
+{
+  // Links + images. Nested [![alt](img)](url) must become an <a> CONTAINING an
+  // <img> with the anchor pointing at the TARGET url (review finding 3: the old
+  // regex parsed it as an image whose src was the poster — wrong href).
+  const p = await renderMd('[![Buy now](https://cdn.example/logo.png)](https://shop.example/item)\n\n[**bold link**](https://x/y)');
+  check('preview: link wrapping an image → <a> with correct href + inner <img>',
+    p.counts.A >= 1 && p.counts.IMG >= 1
+      && p.hrefs.includes('https://shop.example/item')
+      && p.imgSrcs.includes('https://cdn.example/logo.png'),
+    JSON.stringify({ hrefs: p.hrefs, imgSrcs: p.imgSrcs }));
+  check('preview: bold inside a link label renders as <strong>, not literal **',
+    p.counts.STRONG >= 1 && !p.text.includes('**'), p.text.slice(0, 60));
+}
+{
+  // Fenced code: an inner ``` line must be CONTENT of the ~~~ block, not a
+  // closer. (An intermediate draft did `continue` on any fence-looking line
+  // while inside a block, which silently DROPPED the ``` line from the output.)
+  const p = await renderMd('~~~\n``` not a closer\nstill code\n~~~');
+  check('preview: ~~~ fence not closed by an inner ``` line',
+    p.counts.PRE === 1 && p.counts.CODE === 1, JSON.stringify(p.counts));
+  check('preview: inner ``` line is kept as code content, not dropped',
+    p.text.includes('``` not a closer') && p.text.includes('still code'),
+    JSON.stringify(p.text));
+}
+{
+  // Emphasis: markdownify's default emphasis_style is "*", so <em>/<i> arrive
+  // as single asterisks. The flanking rule must keep multiplication literal —
+  // PlainTextConverter passes .txt/.md through VERBATIM, so "2 * 3 and 4 * 5"
+  // is arithmetic, not emphasis.
+  const p = await renderMd('*emphasis* and ***boldit*** and 2 * 3 and 4 * 5\n\n`a * b`');
+  check('preview: *emphasis* renders as a real <em>',
+    p.counts.EM >= 1 && p.text.includes('emphasis'), JSON.stringify(p.counts));
+  check('preview: ***x*** renders as <em><strong>',
+    p.counts.STRONG >= 1 && p.text.includes('boldit'), JSON.stringify(p.counts));
+  check('preview: spaced asterisks stay literal (no false emphasis)',
+    p.text.includes('2 * 3 and 4 * 5'), JSON.stringify(p.text));
+  check('preview: asterisks inside a code span stay literal',
+    p.counts.CODE === 1 && p.text.includes('a * b'), JSON.stringify(p.counts));
+}
+{
+  // Blockquote across two lines + escaped asterisks must unescape
+  // (review finding 4: markdownify escapes * and _ by default).
+  const p = await renderMd('> Quoted \\*text\\*\n> second line\n\n**Price \\* Qty**\n\n*snake\\_case\\_name*');
+  check('preview: blockquote renders as a real <blockquote>',
+    p.counts.BLOCKQUOTE === 1, JSON.stringify(p.counts));
+  check('preview: markdownify backslash escapes are unescaped in visible text',
+    p.text.includes('Price * Qty') && p.text.includes('snake_case_name')
+      && !p.text.includes('\\'), p.text.slice(0, 80));
+  check('preview: escaped asterisk inside bold still yields <strong>',
+    p.counts.STRONG === 1, JSON.stringify(p.counts));
+}
+{
+  // CSV escaped pipe (review finding 2): a cell "x|y" must stay ONE cell.
+  const p = await renderMd('| a | b | c |\n| --- | --- | --- |\n| x\\|y | 2 | 3 |');
+  check('preview: escaped pipe stays inside one table cell',
+    p.counts.TABLE === 1 && p.counts.TR === 2 && p.counts.TD === 3
+      && p.textNodes.some((t) => t === 'x|y'),
+    JSON.stringify({ counts: p.counts, td: p.textNodes }));
+}
+{
+  // Security: script-capable URLs and raw HTML must never become live nodes.
+  const p = await renderMd('<script>alert(1)</script> ![x](javascript:alert(2)) '
+    + '[y](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==) '
+    + '![z](data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=) ![w](//evil.com/x.png) ![v](/\\evil.com/x.png)');
+  check('preview: no script-capable node created from hostile markdown',
+    noScriptNodes(p) && p.counts.IMG === 0 && p.counts.A === 0,
+    JSON.stringify({ counts: p.counts, imgs: p.imgSrcs, hrefs: p.hrefs }));
+  check('preview: backslash-rooted URL refused (no cross-origin beacon)',
+    p.placeholders.some((x) => (x.title || '').includes('evil.com')),
+    JSON.stringify(p.placeholders.map((x) => x.title)));
+}
+{
+  // Empty-alt huge data URI that is NOT a renderable mime (x-emf is not in the
+  // SAFE_URL_RE allowlist), so imageNode takes the synchronous
+  // "source not renderable" branch and builds a placeholder immediately — no
+  // async load needed. The placeholder label/title must be SHORT, never the
+  // 200 KB src (review finding 6: `alt || src` put the whole payload in the DOM
+  // and produced a 16-million-pixel-wide row).
+  const big = 'data:image/x-emf;base64,' + 'A'.repeat(200_000);
+  const p = await renderMd('![](' + big + ')');
+  check('preview: non-renderable empty-alt data URI → placeholder, not an <img>',
+    p.counts.IMG === 0 && p.placeholders.length === 1, JSON.stringify(p.counts));
+  const ph = p.placeholders[0] || { t: '', title: '' };
+  check('preview: placeholder title is a short description, not the raw payload',
+    ph.title.length > 0 && ph.title.length < 300 && ph.t.length < 200,
+    JSON.stringify({ tLen: ph.t.length, titleLen: ph.title.length }));
+}
+{
+  // Quadratic-freeze regression (review finding 1): the OLD INLINE_RE froze the
+  // tab for 13 s on a 200 KB line of "[TODO " (measured). The new linear
+  // scanner must render it fast and without throwing.
+  const hostile = '[TODO '.repeat(34_000); // ~200 KB, one line, all unbalanced
+  const r = await page.evaluate(async (src) => {
+    const { renderPreview } = await import('./app.js');
+    const t0 = performance.now();
+    let err = null;
+    try { renderPreview(src); } catch (e) { err = String(e); }
+    return { ms: performance.now() - t0, err };
+  }, hostile);
+  check('preview: 200 KB unbalanced-bracket line renders fast (no quadratic freeze)',
+    r.err === null && r.ms < 1500, `${Math.round(r.ms)} ms, err=${r.err}`);
+}
+
 console.log('\n==========================');
 console.log(`RESULTS: ${results.pass} passed, ${results.fail} failed`);
 if (results.failures.length) {

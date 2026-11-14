@@ -273,8 +273,20 @@ if (want('S2')) {
   await page.waitForTimeout(400);
   const end = await endState(page);
   const pane = await paneState(page);
-  const renderedText = await page.evaluate(() =>
-    document.getElementById('rendered-out').textContent);
+  // A real <img> element (not innerHTML text): the preview now renders keep-mode
+  // payloads as actual <img src="data:..."> nodes. Asserting on the ELEMENT
+  // makes this non-vacuous — the old string-pushing renderer serialised the
+  // escaped markup into innerHTML too (base64 included), so a text match there
+  // passed for BOTH versions and could not detect a regression to the broken
+  // one. Only a real <img> distinguishes them. Also assert the markup did not
+  // leak as visible text.
+  const rendered = await page.evaluate(() => {
+    const el = document.getElementById('rendered-out');
+    return {
+      imgs: [...el.querySelectorAll('img')].map((i) => i.getAttribute('src') || ''),
+      text: el.textContent,
+    };
+  });
   const log = await getLog(page);
   console.log('   timeline:', JSON.stringify(log));
   check('S2: viewed row stays sample-img.html', end.activeRow === 'sample-img.html', end.activeRow);
@@ -286,10 +298,11 @@ if (want('S2')) {
     passesOf(log, 'sample-img.html') === 1, `passes=${passesOf(log, 'sample-img.html')}`);
   check('S2: docx converted exactly once (normal enqueue pass)',
     passesOf(log, 'sample-img.docx') === 1, `passes=${passesOf(log, 'sample-img.docx')}`);
-  check('S2: preview pane kept across the settle refresh, showing new content',
+  check('S2: preview pane kept across the settle refresh, rendering a real <img>',
     pane.mdHidden === true && pane.renderedHidden === false
-      && fullUriRe.test(renderedText),
-    JSON.stringify({ ...pane, head: renderedText.slice(0, 40) }));
+      && rendered.imgs.some((s) => fullUriRe.test(s))
+      && !rendered.text.includes('!['),
+    JSON.stringify({ ...pane, imgs: rendered.imgs.map((s) => s.slice(0, 30)), textHead: rendered.text.slice(0, 40) }));
   await context.close();
   await browser.close();
 }
